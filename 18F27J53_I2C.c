@@ -42,11 +42,8 @@
 
 #include "18F27J53_I2C.h"
 
-//#define I2C_BB    //Define for BIT BANGED I2C
-//#define I2C_HW    //Define for HARDWARE I2C
-
 #ifdef I2C_BB
-void puti2c_bb(char dev, char *data)
+void put_i2c_str(char dev, char *data)
 {
     dev = (dev<<1);                // Turn 7 bit address into 8 bit WRITE address
     
@@ -60,7 +57,7 @@ void puti2c_bb(char dev, char *data)
     i2c_stop();                    // When complete send a STOP
 
 }
-void geti2c_bb(char dev, char *data, char len)
+void get_i2c_str(char dev, char *data, char len)
 {
     dev = (dev<<1) | 0x01;        // Turn 7 bit address into a 8 bit READ address
     
@@ -76,16 +73,16 @@ void geti2c_bb(char dev, char *data, char len)
     i2c_stop();                   // When complete send a STOP
 
 }
-void SDA_LOW_bb(void)
+void SDA_LOW(void)
 {
     SDA = 0; SDA_IN = 0;          // Make SDA output and Set LOW
 }
-void SCL_LOW_bb(void)
+void SCL_LOW(void)
 {
     SCL = 0; SCL_IN = 0;          // Make SCL output and Set LOW
 }
 
-void i2c_start_bb(void)
+void i2c_start(void)
 {
     // I2C START SEQUENCE
     SDA_HIGH();
@@ -94,7 +91,7 @@ void i2c_start_bb(void)
     SCL_LOW();
 }
 
-void i2c_stop_bb(void)
+void i2c_stop(void)
 {
     // I2C STOP SEQUENCE
     SDA_LOW();
@@ -102,7 +99,7 @@ void i2c_stop_bb(void)
     SDA_HIGH();
 }
 
-char i2c_rx_bb(char ack)
+char i2c_rx(char ack)
 {
     char x, d=0;                 // X = Loop var, D = SDA Byte var
     SDA_HIGH();                  // Make SDA input (Pulled HIGH)
@@ -132,7 +129,7 @@ char i2c_rx_bb(char ack)
     return d;                    // Return the d BYTE (SDA BYTE) 
 }
 
-char i2c_tx_bb(unsigned char d)
+char i2c_tx(unsigned char d)
 {
     char x;
     static char b;
@@ -155,7 +152,7 @@ char i2c_tx_bb(unsigned char d)
     return b;
 }
 
-void Init_I2C_bb(void) {
+void Init_I2C(void) {
 
     // Processor Specific
     ADCON0 = 0;
@@ -168,7 +165,138 @@ void Init_I2C_bb(void) {
 #endif
 
 #ifdef I2C_HW
+	void put_i2c_str(char *data)
+	{
+		unsigned char temp;  
+		while ( *data )                 // transmit data until null character 
+		{
+		if ( SSP1CON1bits.SSPM3 )      // if Master transmitter then execute the following
+		{
+		  temp = putcI2C1 ( *data );
+		  if (temp ) return ( temp );   	
+		  //if ( putcI2C1( *data ) )    // write 1 byte
+		  //{
+		  //  return ( -3 );             // return with write collision error
+		  //}
+		  //IdleI2C1();                  // test for idle condition
+		  //if ( SSP1CON2bits.ACKSTAT )  // test received ack bit state
+		  //{
+		  //  return ( -2 );             // bus device responded with  NOT ACK
+		  //}                            // terminate putsI2C1() function
+		}
 
+		else                           // else Slave transmitter
+		{
+		  PIR1bits.SSP1IF = 0;         // reset SSP1IF bit
+		  SSP1BUF = *data;            // load SSP1BUF with new data
+		  SSP1CON1bits.CKP = 1;        // release clock line 
+		  while ( !PIR1bits.SSP1IF );  // wait until ninth clock pulse received
+
+		  if ( ( SSP1CON1bits.CKP ) && ( !SSP1STATbits.BF ) )// if R/W=0 and BF=0, NOT ACK was received
+		  {
+			return ( -2 );             // terminate PutsI2C1() function
+		  }
+		}
+
+		data ++;                        // increment pointer
+
+		}                                // continue data writes until null character
+
+		return ( 0 );
+	}
+	void get_i2c_str(char *data, char len)
+	{
+	    while ( length-- )            // perform getcI2C1() for 'len' number of bytes
+		{
+		  *data++ = getcI2C1();       // save byte received
+		  while ( SSP1CON2bits.RCEN ); // check that receive sequence is over    
+
+		  if ( PIR2bits.BCL1IF )       // test for bus collision
+		  {
+			return ( -1 );             // return with Bus Collision error 
+		  }
+
+		  
+		if( ((SSP1CON1&0x0F)==0x08) || ((SSP1CON1&0x0F)==0x0B) )	//master mode only
+		{	
+		  if ( len )               // test if 'len' bytes have been read
+		  {
+			SSP1CON2bits.ACKDT = 0;    // set acknowledge bit state for ACK        
+			SSP1CON2bits.ACKEN = 1;    // initiate bus acknowledge sequence
+			while ( SSP1CON2bits.ACKEN ); // wait until ACK sequence is over 
+		  } 
+		} 
+		  
+		}
+		return ( 0 );                  // last byte received so don't send ACK      
+	}
+	
+	void i2c_start(void)
+	{
+		SSP1CON2bits.SEN = 1;            // initiate bus start condition
+	}
+	
+	void i2c_stop(void)
+	{
+		SSP1CON2bits.PEN = 1;            // initiate bus stop condition
+	}
+	
+	char i2c_rx(void)
+	{
+		if( ((SSP1CON1&0x0F)==0x08) || ((SSP1CON1&0x0F)==0x0B) )	//master mode only
+			SSP1CON2bits.RCEN = 1;           // enable master for 1 byte reception
+		
+		while ( !SSP1STATbits.BF );      // wait until byte received  
+
+		return ( SSP1BUF );              // return with read byte 
+	}
+	
+	char i2c_tx(unsigned char d)
+	{
+		SSP1BUF = d;           // write single byte to SSP1BUF
+		if ( SSP1CON1bits.WCOL )      // test if write collision occurred
+			return ( -1 );              // if WCOL bit is set return negative #
+		else
+		{
+			if( ((SSP1CON1&0x0F)!=0x08) && ((SSP1CON1&0x0F)!=0x0B) )	//slave mode only 
+			{
+			
+			SSP1CON1bits.CKP = 1;        // release clock line 
+			while ( !PIR1bits.SSP1IF );  // wait until ninth clock pulse received
+
+			if ( ( !SSP1STATbits.R_W ) && ( !SSP1STATbits.BF ) )// if R/W=0 and BF=0, NOT ACK was received
+			{
+				return ( -2 );             //Return NACK
+			}	
+			else
+				return(0);				//Return ACK
+
+		}
+		else if( ((SSP1CON1&0x0F)==0x08) || ((SSP1CON1&0x0F)==0x0B) )	//master mode only	
+		{
+			while( SSP1STATbits.BF );   // wait until write cycle is complete      
+			IdleI2C1();                  // ensure module is idle
+			if ( SSP1CON2bits.ACKSTAT ) // test for ACK condition received
+				return ( -2 );				//Return NACK	
+			else
+				return ( 0 );               //Return ACK
+			}
+		}
+	}	
+	
+	void Init_I2C( unsigned char sync_mode, unsigned char slew )
+	{
+		SSP1STAT &= 0x3F;                // power on state 
+		SSP1CON1 = 0x00;                 // power on state
+		SSP1CON2 = 0x00;                 // power on state
+		SSP1CON1 |= sync_mode;           // select serial mode 
+		SSP1STAT |= slew;                // slew rate on/off 
+
+		I2C1_SCL = 1;                    // Set SCL1 (PORTC,3) pin to input
+		I2C1_SDA = 1;                    // Set SDA1 (PORTC,4) pin to input
+
+		SSP1CON1 |= SSPENB;              // enable synchronous serial port 
+	}
 #endif
 
 // Below Are some SIMPLE delay Routines

@@ -39,19 +39,49 @@
 #ifndef __18F27J53_I2C_H
 #define __18F27J53_I2C_H
 
+	//#define I2C_BB    //Define for BIT BANGED I2C
+	#define I2C_HW    //Define for HARDWARE I2C
+
 	// Main Header for PIC18F27J53
 	#include "p18F27j53.h"
 	#include "delays.h"
 	
-	// I2C Port Definitions (processor specific)
-    #define SCL     TRISCbits.TRISC0
-    #define SCL_IN  PORTCbits.RC0
-	#define SCL_HIGH() (SCL = 1)
-    
-	#define SDA     TRISCbits.TRISC1
-    #define SDA_IN  PORTCbits.RC1
-	#define SDA_HIGH() (SDA = 1)
-	
+	#ifdef I2C_BB
+		// I2C Port Definitions (processor specific)
+		#define SCL     TRISCbits.TRISC0
+		#define SCL_IN  PORTCbits.RC0
+		#define SCL_HIGH() (SCL = 1)
+		
+		#define SDA     TRISCbits.TRISC1
+		#define SDA_IN  PORTCbits.RC1
+		#define SDA_HIGH() (SDA = 1)
+	#endif
+		
 	// Functions
+
+	void i2c_start(void);
+	void i2c_stop(void);
+	
+	char i2c_tx(unsigned char d);
+	
+	
+	#ifdef I2C_HW
+		void get_i2c_str(char *data, char len);
+		void put_i2c_str(char *data);
+		char i2c_rx(void);
+		void Init_I2C( unsigned char sync_mode, unsigned char slew )
+	#endif
+
+	#ifdef I2C_BB
+		void put_i2c_str(char dev, char *data);
+		void get_i2c_str(char dev, char *data, char len);
+		char i2c_rx(char ack);
+		void Init_I2C(void);
+		void SDA_LOW(void);
+		void SCL_LOW(void);
+	#endif
+
+	void delay (unsigned int time);
+	void delay2 (unsigned int time);
 	
 #endif
