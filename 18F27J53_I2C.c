@@ -292,8 +292,8 @@ void Init_I2C(void) {
 		SSP1CON1 |= sync_mode;           // select serial mode 
 		SSP1STAT |= slew;                // slew rate on/off 
 
-		I2C1_SCL = 1;                    // Set SCL1 (PORTC,3) pin to input
-		I2C1_SDA = 1;                    // Set SDA1 (PORTC,4) pin to input
+		SCL_HIGH = 1;                    // Set SCL1 (PORTC,3) pin to input
+		SDA_HIGH = 1;                    // Set SDA1 (PORTC,4) pin to input
 
 		SSP1CON1 |= SSPENB;              // enable synchronous serial port 
 	}
